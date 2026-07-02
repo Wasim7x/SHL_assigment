@@ -37,14 +37,14 @@ Prompts are structured with role separation: a system prompt enforces scope rule
 
 ## Tools Used
 - **Claude Code** (AI-assisted coding): Architecture design, code scaffolding, prompt iteration
-- **Google Gemini 2.0 Flash**: Runtime LLM for intent classification and generation
+- **Groq API (Llama 3.1 8B Instant)**: Runtime LLM for intent classification and generation (free tier, ~200ms inference)
 - **sentence-transformers + FAISS**: Semantic retrieval pipeline
 - **Render**: Deployment platform (free tier)
 
 ## Stack Justification
 | Component | Choice | Reason |
 |-----------|--------|--------|
-| LLM | Gemini 2.0 Flash | Free tier, fast (~2-5s), structured output support |
+| LLM | Groq (Llama 3.1 8B) | Free tier, extremely fast (~200ms), OpenAI-compatible API |
 | Embeddings | all-MiniLM-L6-v2 | Lightweight (80MB), 384-dim, fast inference |
 | Vector Store | FAISS | In-memory, no external dependency, <100ms search |
 | Backend | FastAPI | Async-native, auto-generated docs, Pydantic validation |

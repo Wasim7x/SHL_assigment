@@ -12,7 +12,7 @@ from app.schemas.response import ChatResponse
 from app.catalog.models import Assessment
 from app.retrieval.vector_store import VectorStore
 from app.retrieval.retriever import Retriever
-from app.llm.gemini import get_gemini_client
+from app.llm.gemini import get_llm_client
 from app.agent.guardrails import check_scope, count_turns
 from app.agent.prompts import SYSTEM_PROMPT, INTENT_CLASSIFICATION_PROMPT
 from app.agent.behaviors import (
@@ -127,9 +127,9 @@ class Orchestrator:
         return await self._llm_classify(messages)
 
     async def _llm_classify(self, messages: list[Message]) -> Intent:
-        """Use Gemini to classify intent when rules are ambiguous."""
+        """Use LLM to classify intent when rules are ambiguous."""
         try:
-            client = get_gemini_client()
+            client = get_llm_client()
             conversation = format_conversation(messages)
             prompt = INTENT_CLASSIFICATION_PROMPT.format(conversation=conversation)
 

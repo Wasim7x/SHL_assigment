@@ -6,7 +6,7 @@ from typing import Optional
 from app.catalog.models import Assessment
 from app.catalog.loader import find_assessment_by_name
 from app.retrieval.retriever import Retriever
-from app.llm.gemini import get_gemini_client
+from app.llm.gemini import get_llm_client
 from app.agent.prompts import (
     SYSTEM_PROMPT,
     QUERY_BUILDER_PROMPT,
@@ -54,7 +54,7 @@ def format_candidates(assessments: list[tuple[Assessment, float]]) -> str:
 
 async def handle_clarify(messages: list[Message]) -> ChatResponse:
     """Ask targeted clarifying questions when not enough info to recommend."""
-    client = get_gemini_client()
+    client = get_llm_client()
     conversation = format_conversation(messages)
 
     prompt = CLARIFY_PROMPT.format(conversation=conversation)
@@ -75,7 +75,7 @@ async def handle_recommend(
     catalog: list[Assessment],
 ) -> ChatResponse:
     """Build query, retrieve, re-rank, and return recommendations."""
-    client = get_gemini_client()
+    client = get_llm_client()
     conversation = format_conversation(messages)
 
     # Step 1: Build search query from conversation
@@ -156,7 +156,7 @@ async def handle_refine(
     catalog: list[Assessment],
 ) -> ChatResponse:
     """Refine previous recommendations based on new constraints."""
-    client = get_gemini_client()
+    client = get_llm_client()
     conversation = format_conversation(messages)
 
     # Extract previous recommendations from conversation
@@ -242,7 +242,7 @@ async def handle_compare(
     catalog: list[Assessment],
 ) -> ChatResponse:
     """Compare specific named assessments using catalog data only."""
-    client = get_gemini_client()
+    client = get_llm_client()
     latest_message = messages[-1].content
 
     # Find named assessments in the message
@@ -315,7 +315,7 @@ async def handle_compare(
 
 async def handle_refuse(messages: list[Message]) -> ChatResponse:
     """Politely refuse an off-topic request."""
-    client = get_gemini_client()
+    client = get_llm_client()
     latest_message = messages[-1].content
 
     prompt = REFUSE_PROMPT.format(message=latest_message)

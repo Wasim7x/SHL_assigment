@@ -1,29 +1,26 @@
-"""Google Gemini LLM client wrapper with async support."""
+"""Groq LLM client wrapper — free tier, fast inference with Llama models."""
 
 import json
 import logging
 import asyncio
 from typing import Optional
 
-import google.generativeai as genai
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-class GeminiClient:
-    """Async wrapper around Google Gemini 2.0 Flash."""
+
+class LLMClient:
+    """Async client for Groq API (OpenAI-compatible interface)."""
 
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(
-            "gemini-2.0-flash",
-            generation_config=genai.GenerationConfig(
-                temperature=0.3,
-                max_output_tokens=2048,
-            ),
-        )
+        self.api_key = settings.GROQ_API_KEY
+        self.model = settings.LLM_MODEL
+        self.client = httpx.AsyncClient(timeout=settings.LLM_TIMEOUT)
 
     async def generate(
         self,
@@ -33,46 +30,53 @@ class GeminiClient:
         json_mode: bool = False,
     ) -> str:
         """
-        Generate a response from Gemini.
+        Generate a response from Groq (Llama).
 
         Args:
-            prompt: The full prompt including conversation context
+            prompt: The user/context prompt
             system_instruction: System-level instruction
-            temperature: Sampling temperature (lower = more deterministic)
+            temperature: Sampling temperature
             json_mode: If True, request JSON output format
 
         Returns:
             The generated text response
         """
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
+
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 2048,
+        }
+
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
         try:
-            # Build the model with system instruction if provided
-            generation_config = genai.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=2048,
+            response = await self.client.post(
+                GROQ_API_URL,
+                json=body,
+                headers=headers,
             )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            return content
 
-            if json_mode:
-                generation_config.response_mime_type = "application/json"
-
-            model = genai.GenerativeModel(
-                "gemini-2.0-flash",
-                generation_config=generation_config,
-                system_instruction=system_instruction,
-            )
-
-            # Run synchronous API call in thread pool to not block event loop
-            response = await asyncio.to_thread(
-                model.generate_content, prompt
-            )
-
-            if response.text:
-                return response.text.strip()
-            else:
-                logger.warning("Gemini returned empty response")
-                return ""
-
+        except httpx.HTTPStatusError as e:
+            logger.error("Groq API HTTP error %d: %s", e.response.status_code, e.response.text[:200])
+            raise
         except Exception as e:
-            logger.error("Gemini API error: %s", e)
+            logger.error("Groq API error: %s", e)
             raise
 
     async def generate_json(
@@ -80,15 +84,17 @@ class GeminiClient:
         prompt: str,
         system_instruction: Optional[str] = None,
     ) -> dict:
-        """Generate and parse a JSON response from Gemini."""
+        """Generate and parse a JSON response."""
+        # Add explicit JSON instruction to prompt for reliability
+        json_prompt = prompt + "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no extra text."
+
         response = await self.generate(
-            prompt=prompt,
+            prompt=json_prompt,
             system_instruction=system_instruction,
             json_mode=True,
         )
 
         try:
-            # Try parsing directly
             return json.loads(response)
         except json.JSONDecodeError:
             # Try extracting JSON from markdown code blocks
@@ -98,18 +104,26 @@ class GeminiClient:
             elif "```" in response:
                 json_str = response.split("```")[1].split("```")[0].strip()
                 return json.loads(json_str)
-            else:
-                logger.error("Failed to parse JSON from Gemini response: %s", response[:200])
-                raise ValueError(f"Could not parse JSON from response: {response[:100]}")
+            # Try finding JSON object in response
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start >= 0 and end > start:
+                return json.loads(response[start:end])
+            logger.error("Failed to parse JSON from response: %s", response[:200])
+            raise ValueError(f"Could not parse JSON from response: {response[:100]}")
+
+    async def close(self):
+        """Close the HTTP client."""
+        await self.client.aclose()
 
 
 # Singleton instance
-_client: Optional[GeminiClient] = None
+_client: Optional[LLMClient] = None
 
 
-def get_gemini_client() -> GeminiClient:
-    """Get or create the singleton Gemini client."""
+def get_llm_client() -> LLMClient:
+    """Get or create the singleton LLM client."""
     global _client
     if _client is None:
-        _client = GeminiClient()
+        _client = LLMClient()
     return _client

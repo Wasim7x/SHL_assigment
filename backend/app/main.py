@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,18 +20,30 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load catalog and FAISS index on startup."""
-    logger.info("Loading catalog from %s", settings.CATALOG_PATH)
-    app.state.catalog = load_catalog(settings.CATALOG_PATH)
+    # Resolve paths relative to the app directory
+    base_dir = Path(__file__).parent.parent
+    catalog_path = base_dir / settings.CATALOG_PATH
+    index_path = base_dir / settings.FAISS_INDEX_PATH
+
+    logger.info("Loading catalog from %s", catalog_path)
+    app.state.catalog = load_catalog(str(catalog_path))
     logger.info("Loaded %d assessments", len(app.state.catalog))
 
-    logger.info("Loading FAISS index from %s", settings.FAISS_INDEX_PATH)
+    logger.info("Loading FAISS index from %s", index_path)
     app.state.vector_store = VectorStore.load(
-        settings.FAISS_INDEX_PATH, app.state.catalog
+        str(index_path), app.state.catalog
     )
     logger.info("FAISS index ready with %d vectors", app.state.vector_store.size)
 
     yield
 
+    # Cleanup LLM client on shutdown
+    from app.llm.gemini import get_llm_client
+    try:
+        client = get_llm_client()
+        await client.close()
+    except Exception:
+        pass
     logger.info("Shutting down")
 
 
@@ -41,7 +54,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend from any origin during development
+# CORS — allow requests from any origin
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),
