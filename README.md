@@ -52,7 +52,7 @@ curl https://your-app.onrender.com/health
 
 ### POST /chat
 ```bash
-curl -X POST https://your-app.onrender.com/chat \
+curl -X POST https://shl-assigment-mc2f.onrender.com/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
